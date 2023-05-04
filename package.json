@@ -1,0 +1,37 @@
+{
+  "name": "@eckidevs/bewatched",
+  "version": "0.1.1",
+  "license": "MIT",
+  "description": "Watch directories for file changes in Bun.",
+  "module": "dist/index.js",
+  "type": "module",
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "*.d.ts"
+  ],
+  "author": {
+    "email": "eckhardt@dreyer.com.na",
+    "name": "Eckhardt Dreyer",
+    "url": "https://eckhardt.dreyer.com.na"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://donate.stripe.com/7sI7vb99Q9dQbzGeUU"
+  },
+  "repository": "github:Eckhardt-D/bewatched",
+  "engines": {
+    "bun": ">=0.5.9"
+  },
+  "scripts": {
+    "test": "bun test",
+    "bench": "bun run benchmarks/ls.ts",
+    "build": "tsup ./index.ts --dts --format esm"
+  },
+  "devDependencies": {
+    "bun-types": "^0.5.0",
+    "tinybench": "^2.5.0",
+    "tsup": "^6.7.0",
+    "typescript": "^5.0.4"
+  }
+}
