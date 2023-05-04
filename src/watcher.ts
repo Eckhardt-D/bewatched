@@ -1,6 +1,7 @@
 import { statSync, existsSync } from "fs";
 import { join } from "path";
 const ignored: (string | RegExp)[] = [];
+let timeout: Timer;
 
 export type Stat = {
   type: "file";
@@ -104,7 +105,7 @@ export class Watcher {
   private async _walk(
     currentPath: string,
     ignoreAdds = this._ignoreInitialAdds
-  ) {
+  ): Promise<void> {
     if (!existsSync(currentPath)) {
       return this.emitOrThrowError(
         new Error("Could not find path: " + currentPath)
@@ -139,14 +140,14 @@ export class Watcher {
         return name?.match(path) || currentPath.match(path);
       });
       parts = undefined;
+      const pathPlusName = join(currentPath, name);
 
       if (isDirectory) {
         if (shouldIgnore) {
           continue;
         }
-        await this._walk(join(currentPath, name));
+        await this._walk(pathPlusName);
         // TODO: watch directories too? for delete event
-        continue;
       }
 
       if (shouldIgnore) {
@@ -154,7 +155,7 @@ export class Watcher {
       }
 
       // This means the watcher is given a single file
-      const fullPath = currentPath === name ? name : join(currentPath, name);
+      const fullPath = currentPath === name ? name : pathPlusName;
       let stat;
 
       try {
@@ -212,6 +213,10 @@ export class Watcher {
       return;
     }
 
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+
     if (!this._busy) {
       this._walk(this.root, false).then(() => {
         this._busy = false;
@@ -222,9 +227,11 @@ export class Watcher {
       return;
     }
 
-    setTimeout(() => {
-      this.watch();
-    }, 100);
+    timeout = setTimeout(() => {
+      process.nextTick(() => {
+        this.watch();
+      });
+    }, 34);
   }
 
   print() {
