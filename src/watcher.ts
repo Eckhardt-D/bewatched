@@ -1,5 +1,7 @@
 import { statSync, existsSync } from "fs";
 import { join } from "path";
+import { traverser } from "./traverser";
+
 const ignored: (string | RegExp)[] = [];
 let timeout: Timer;
 
@@ -28,9 +30,11 @@ type WatcherCallback<T extends WatcherEvent> = T extends "ready"
   ? (data: Stat) => void
   : never;
 
+export type Files = Map<string, Stat>;
+
 export class Watcher {
   private root: string;
-  private _files: Map<string, Stat>;
+  private _files: Files;
   private _ready: boolean = false;
   private _busy: boolean = false;
   private _stopped: boolean = false;
@@ -77,7 +81,7 @@ export class Watcher {
     this._stopped = true;
   }
 
-  private _emit<T extends WatcherEvent>(
+  _emit<T extends WatcherEvent>(
     event: T,
     data?: Parameters<WatcherCallback<T>>[0]
   ) {
@@ -111,91 +115,9 @@ export class Watcher {
         new Error("Could not find path: " + currentPath)
       );
     }
+
     this._busy = true;
-    /* This is the main reason for this lib,
-     * until Bun gets a Dir method
-     * or native Watch method. ls is slooow,
-     * but does the trick for now.
-     */
-    const proc = Bun.spawn(["ls", "-al", currentPath]);
-    const output = await new Response(proc.stdout).text();
-    const lines = output.split("\n");
-
-    lines.pop();
-
-    // Cheapish way to see if directory
-    // to remove total, . and ..
-    // TODO: refactor
-    if (lines[1]?.at(-1) === ".") {
-      lines.shift();
-      lines.shift();
-      lines.shift();
-    }
-
-    for await (const line of lines) {
-      let parts: string[] | undefined = line.split(/\s+/);
-      const isDirectory = parts[0][0] === "d";
-      const name = parts.at(-1)!;
-      const shouldIgnore = ignored.some((path) => {
-        return name?.match(path) || currentPath.match(path);
-      });
-      parts = undefined;
-      const pathPlusName = join(currentPath, name);
-
-      if (isDirectory) {
-        if (shouldIgnore) {
-          continue;
-        }
-        await this._walk(pathPlusName);
-        // TODO: watch directories too? for delete event
-      }
-
-      if (shouldIgnore) {
-        continue;
-      }
-
-      // This means the watcher is given a single file
-      const fullPath = currentPath === name ? name : pathPlusName;
-      let stat;
-
-      try {
-        stat = statSync(fullPath, {
-          throwIfNoEntry: true,
-        });
-      } catch (error) {
-        this.emitOrThrowError(error as Error);
-        continue;
-      }
-
-      const modified = stat.mtime.getTime();
-
-      const myStat: Stat = {
-        created: stat.birthtime.getTime(),
-        modified,
-        name: fullPath.split("/").at(-1)!,
-        path: fullPath,
-        type: "file",
-      };
-
-      const exists = this._files.has(fullPath);
-
-      if (exists) {
-        const previous = this._files.get(fullPath)!;
-
-        if (previous.modified < modified) {
-          this._emit("change", {
-            updated: myStat,
-            previous,
-          });
-        }
-      } else {
-        if (!ignoreAdds) {
-          this._emit("add", myStat);
-        }
-      }
-
-      this._files.set(fullPath, myStat);
-    }
+    await traverser(currentPath, this._files, ignored, ignoreAdds, this);
   }
 
   async collect(): Promise<void> {
@@ -228,9 +150,7 @@ export class Watcher {
     }
 
     timeout = setTimeout(() => {
-      process.nextTick(() => {
-        this.watch();
-      });
+      this.watch();
     }, 34);
   }
 
