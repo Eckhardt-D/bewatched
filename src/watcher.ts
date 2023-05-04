@@ -136,7 +136,7 @@ export class Watcher {
       const isDirectory = parts[0][0] === "d";
       const name = parts.at(-1)!;
       const shouldIgnore = ignored.some((path) => {
-        name?.match(path);
+        return name?.match(path) || currentPath.match(path);
       });
       parts = undefined;
 
